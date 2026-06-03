@@ -73,5 +73,8 @@ The SDK exposes the full ID Analyzer API v2 surface via service fields on the cl
 API-level errors are returned as `*idanalyzer.APIError` (with `Code` and `Message`);
 invalid client-side arguments are returned as `*idanalyzer.InvalidArgumentError`.
 
+## Documentation
+Guide: [idanalyzer.helptal.com/help/go](https://idanalyzer.helptal.com/help/go) · Knowledge base: [idanalyzer.helptal.com/help](https://idanalyzer.helptal.com/help)
+
 ## License
 MIT
