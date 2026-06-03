@@ -32,17 +32,17 @@ func (p *Profile) set(k string, v any) *Profile {
 	return p
 }
 
-func (p *Profile) CanvasSize(pixels int) *Profile          { return p.set("canvasSize", pixels) }
-func (p *Profile) OrientationCorrection(b bool) *Profile   { return p.set("orientationCorrection", b) }
-func (p *Profile) ObjectDetection(b bool) *Profile         { return p.set("objectDetection", b) }
-func (p *Profile) AAMVABarcodeParsing(b bool) *Profile     { return p.set("AAMVABarcodeParsing", b) }
-func (p *Profile) OutputSize(pixels int) *Profile          { return p.set("outputSize", pixels) }
-func (p *Profile) InferFullName(b bool) *Profile           { return p.set("inferFullName", b) }
-func (p *Profile) SplitFirstName(b bool) *Profile          { return p.set("splitFirstName", b) }
-func (p *Profile) TransactionAuditReport(b bool) *Profile  { return p.set("transactionAuditReport", b) }
-func (p *Profile) SetTimezone(tz string) *Profile          { return p.set("timezone", tz) }
-func (p *Profile) Obscure(fieldKeys []string) *Profile     { return p.set("obscure", fieldKeys) }
-func (p *Profile) Webhook(url string) *Profile             { return p.set("webhook", url) }
+func (p *Profile) CanvasSize(pixels int) *Profile         { return p.set("canvasSize", pixels) }
+func (p *Profile) OrientationCorrection(b bool) *Profile  { return p.set("orientationCorrection", b) }
+func (p *Profile) ObjectDetection(b bool) *Profile        { return p.set("objectDetection", b) }
+func (p *Profile) AAMVABarcodeParsing(b bool) *Profile    { return p.set("AAMVABarcodeParsing", b) }
+func (p *Profile) OutputSize(pixels int) *Profile         { return p.set("outputSize", pixels) }
+func (p *Profile) InferFullName(b bool) *Profile          { return p.set("inferFullName", b) }
+func (p *Profile) SplitFirstName(b bool) *Profile         { return p.set("splitFirstName", b) }
+func (p *Profile) TransactionAuditReport(b bool) *Profile { return p.set("transactionAuditReport", b) }
+func (p *Profile) SetTimezone(tz string) *Profile         { return p.set("timezone", tz) }
+func (p *Profile) Obscure(fieldKeys []string) *Profile    { return p.set("obscure", fieldKeys) }
+func (p *Profile) Webhook(url string) *Profile            { return p.set("webhook", url) }
 
 // SaveResult controls whether transaction results and output images are stored.
 func (p *Profile) SaveResult(saveTransaction, saveImages bool) *Profile {
