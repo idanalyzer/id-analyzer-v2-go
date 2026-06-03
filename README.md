@@ -74,7 +74,7 @@ API-level errors are returned as `*idanalyzer.APIError` (with `Code` and `Messag
 invalid client-side arguments are returned as `*idanalyzer.InvalidArgumentError`.
 
 ## Documentation
-Guide: [idanalyzer.helptal.com/help/go](https://idanalyzer.helptal.com/help/go) · Knowledge base: [idanalyzer.helptal.com/help](https://idanalyzer.helptal.com/help)
+Guide: [developer.idanalyzer.com/help/go](https://developer.idanalyzer.com/help/go) · Knowledge base: [developer.idanalyzer.com/help](https://developer.idanalyzer.com/help)
 
 ## License
 MIT
