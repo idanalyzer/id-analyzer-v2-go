@@ -13,7 +13,7 @@ import (
 
 func main() {
 	// API key from the IDANALYZER_KEY env var; region from IDANALYZER_REGION (default "us").
-	// Use idanalyzer.WithRegion("eu") for the EU fleet.
+	// Use idanalyzer.WithRegion("eu") for the EU endpoint.
 	client, err := idanalyzer.NewClient("")
 	if err != nil {
 		log.Fatal(err)

@@ -34,7 +34,7 @@ Requires Go 1.22+.
 
 ## Authentication & region
 
-Pass your API key to `NewClient`, or set the `IDANALYZER_KEY` environment variable. The SDK targets the load-balanced US fleet (`https://api2.idanalyzer.com`) by default; select the EU fleet with `IDANALYZER_REGION=eu` or `idanalyzer.WithRegion("eu")`. For on-premise ID Fort, use `idanalyzer.WithBaseURL("https://your-host")`.
+Pass your API key to `NewClient`, or set the `IDANALYZER_KEY` environment variable. The SDK targets the US endpoint (`https://api2.idanalyzer.com`) by default; select the EU endpoint with `IDANALYZER_REGION=eu` or `idanalyzer.WithRegion("eu")`. For on-premise ID Fort, use `idanalyzer.WithBaseURL("https://your-host")`.
 
 ## Quick start
 

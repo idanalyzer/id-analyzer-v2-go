@@ -1,6 +1,6 @@
 // Package idanalyzer is the official Go client library for the ID Analyzer API v2.
 //
-// It targets the load-balanced api2.idanalyzer.com fleet (US, default) or
+// It targets the api2.idanalyzer.com endpoint (US, default) or
 // api2-eu.idanalyzer.com (EU). Create a client with NewClient and use the
 // service fields (Scanner, Biometric, AML, Contract, Transaction, Docupass,
 // Profile, Webhook, Account).
