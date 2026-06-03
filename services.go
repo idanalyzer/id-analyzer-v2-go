@@ -10,30 +10,33 @@ import (
 // Scanner
 // ---------------------------------------------------------------------------
 
+// ScannerService provides identity document scanning operations. Access it via
+// Client.Scanner.
 type ScannerService struct{ client *Client }
 
 // ScanRequest holds the inputs and options for a standard scan (POST /scan).
+// DocumentFront and Profile are required; all other fields are optional.
 type ScanRequest struct {
-	DocumentFront string // file path, base64, URL, or "ref:" cache reference (required)
-	DocumentBack  string
-	Face          string // selfie photo for biometric verification
-	FaceVideo     string // selfie video for biometric verification
-	Profile       *Profile
+	DocumentFront string   // file path, base64, URL, or "ref:" cache reference (required)
+	DocumentBack  string   // back of the document, same accepted forms as DocumentFront
+	Face          string   // selfie photo for biometric verification
+	FaceVideo     string   // selfie video for biometric verification (used when Face is empty)
+	Profile       *Profile // KYC profile to apply (required; build with NewProfile)
 
-	RestrictCountry      string
-	RestrictState        string
-	RestrictType         string
-	VerifyName           string
-	VerifyDob            string // YYYY/MM/DD
-	VerifyAge            string // e.g. "18-40"
-	VerifyAddress        string
-	VerifyPostcode       string
-	VerifyDocumentNumber string
-	ContractGenerate     string
-	ContractFormat       string
-	ContractPrefill      map[string]any
-	IP                   string
-	CustomData           string
+	RestrictCountry      string         // accept only these issuing countries (ISO Alpha-2, comma separated)
+	RestrictState        string         // accept only these issuing states (comma separated)
+	RestrictType         string         // accept only these document types (e.g. "PD")
+	VerifyName           string         // assert the holder's name matches this value
+	VerifyDob            string         // assert the date of birth (YYYY/MM/DD)
+	VerifyAge            string         // assert the age falls in this range, e.g. "18-40"
+	VerifyAddress        string         // assert the holder's address matches this value
+	VerifyPostcode       string         // assert the postcode matches this value
+	VerifyDocumentNumber string         // assert the document number matches this value
+	ContractGenerate     string         // contract template ID to fill from the scan result
+	ContractFormat       string         // generated contract format (e.g. "PDF")
+	ContractPrefill      map[string]any // extra key/value data merged into the contract
+	IP                   string         // end-user IP address, for geolocation/risk signals
+	CustomData           string         // arbitrary string echoed back on the transaction
 }
 
 func putStr(m map[string]any, k, v string) {
@@ -42,7 +45,11 @@ func putStr(m map[string]any, k, v string) {
 	}
 }
 
-// Scan initiates a full identity document scan and optional biometric verification.
+// Scan initiates a full identity document scan and optional biometric
+// verification. The request's DocumentFront and Profile fields are required;
+// it returns the decoded JSON response as a map, or an error (including
+// *InvalidArgumentError for missing inputs and *APIError for an API-reported
+// failure).
 func (s *ScannerService) Scan(req ScanRequest) (map[string]any, error) {
 	if req.Profile == nil {
 		return nil, invalid("Profile is required (use NewProfile)")
@@ -95,12 +102,16 @@ func (s *ScannerService) Scan(req ScanRequest) (map[string]any, error) {
 	return s.client.doJSON(http.MethodPost, "scan", payload, nil)
 }
 
-// QuickScan initiates a quick OCR-only scan.
+// QuickScan initiates a quick OCR-only scan. documentFront (required) and
+// documentBack accept a file path, base64 string or URL. When cacheImage is
+// true the uploaded image is retained server-side so it can be reused via a
+// "ref:" reference. It returns the decoded JSON response, or an error.
 func (s *ScannerService) QuickScan(documentFront, documentBack string, cacheImage bool) (map[string]any, error) {
 	return s.quick("quickscan", documentFront, documentBack, cacheImage)
 }
 
-// VeryQuickScan initiates a very fast OCR-only scan.
+// VeryQuickScan initiates a very fast OCR-only scan. Its parameters and return
+// value match QuickScan; it trades accuracy for lower latency.
 func (s *ScannerService) VeryQuickScan(documentFront, documentBack string, cacheImage bool) (map[string]any, error) {
 	return s.quick("veryquickscan", documentFront, documentBack, cacheImage)
 }
@@ -127,9 +138,16 @@ func (s *ScannerService) quick(uri, documentFront, documentBack string, cacheIma
 // Biometric
 // ---------------------------------------------------------------------------
 
+// BiometricService provides face matching and liveness operations. Access it
+// via Client.Biometric.
 type BiometricService struct{ client *Client }
 
-// VerifyFace performs 1:1 face verification against a reference image (POST /face).
+// VerifyFace performs 1:1 face verification against a reference image
+// (POST /face). profile (required) selects the KYC profile; referenceFaceImage
+// (required) is the known face to match against; supply exactly one of
+// facePhoto or faceVideo as the live capture to verify; customData is an
+// optional string echoed on the transaction. It returns the decoded JSON
+// response, or an error.
 func (b *BiometricService) VerifyFace(profile *Profile, referenceFaceImage, facePhoto, faceVideo, customData string) (map[string]any, error) {
 	if profile == nil {
 		return nil, invalid("Profile is required")
@@ -162,6 +180,9 @@ func (b *BiometricService) VerifyFace(profile *Profile, referenceFaceImage, face
 }
 
 // VerifyLiveness performs a standalone liveness check (POST /liveness).
+// profile (required) selects the KYC profile; supply exactly one of facePhoto
+// or faceVideo as the live capture; customData is an optional string echoed on
+// the transaction. It returns the decoded JSON response, or an error.
 func (b *BiometricService) VerifyLiveness(profile *Profile, facePhoto, faceVideo, customData string) (map[string]any, error) {
 	if profile == nil {
 		return nil, invalid("Profile is required")
@@ -191,19 +212,23 @@ func (b *BiometricService) VerifyLiveness(profile *Profile, facePhoto, faceVideo
 // AML
 // ---------------------------------------------------------------------------
 
+// AMLService provides anti-money-laundering / sanctions screening operations.
+// Access it via Client.AML.
 type AMLService struct{ client *Client }
 
-// AMLSearchRequest holds parameters for an AML v1 search (POST /aml).
+// AMLSearchRequest holds parameters for an AML v1 search (POST /aml). Either
+// Name or IDNumber must be set.
 type AMLSearchRequest struct {
-	Name      string
-	IDNumber  string
-	Entity    int // 0=Person, 1=Corporation/Legal Entity
-	Country   string
-	Database  []string
-	BirthYear string
+	Name      string   // full name of the person or entity to screen
+	IDNumber  string   // government/registration ID number to screen
+	Entity    int      // 0=Person, 1=Corporation/Legal Entity
+	Country   string   // ISO Alpha-2 country to bias/limit the search
+	Database  []string // specific watchlist databases to query (default: all)
+	BirthYear string   // year of birth, to disambiguate matches
 }
 
-// Search screens against the AML database (POST /aml).
+// Search screens a name or ID number against the AML watchlists (POST /aml).
+// It returns the decoded JSON response, or an error.
 func (a *AMLService) Search(req AMLSearchRequest) (map[string]any, error) {
 	if req.Name == "" && req.IDNumber == "" {
 		return nil, invalid("either Name or IDNumber is required")
@@ -219,7 +244,10 @@ func (a *AMLService) Search(req AMLSearchRequest) (map[string]any, error) {
 	return a.client.doJSON(http.MethodPost, "aml", payload, nil)
 }
 
-// SearchV3 screens against the AML v3 database (POST /amlv3). Provide Text or ID.
+// SearchV3 screens against the AML v3 database (POST /amlv3). Provide either a
+// free-text query (text) or a record id; limit caps the number of results
+// (sent only when positive) and page selects the result page (1-based, sent
+// only when positive). It returns the decoded JSON response, or an error.
 func (a *AMLService) SearchV3(text, id string, limit, page int) (map[string]any, error) {
 	if text == "" && id == "" {
 		return nil, invalid("either text or id is required")
@@ -240,9 +268,15 @@ func (a *AMLService) SearchV3(text, id string, limit, page int) (map[string]any,
 // Contract
 // ---------------------------------------------------------------------------
 
+// ContractService provides contract/document template management and document
+// generation. Access it via Client.Contract.
 type ContractService struct{ client *Client }
 
-// Generate generates a document from a template (POST /generate).
+// Generate generates a document from a template (POST /generate). templateID
+// (required) names the template; format defaults to "PDF" when empty;
+// transactionID optionally links the document to an existing transaction whose
+// data prefills the template; fillData supplies additional key/value pairs. It
+// returns the decoded JSON response, or an error.
 func (c *ContractService) Generate(templateID, format, transactionID string, fillData map[string]any) (map[string]any, error) {
 	if templateID == "" {
 		return nil, invalid("templateID is required")
@@ -258,7 +292,11 @@ func (c *ContractService) Generate(templateID, format, transactionID string, fil
 	return c.client.doJSON(http.MethodPost, "generate", payload, nil)
 }
 
-// ListTemplate lists contract templates (GET /contract).
+// ListTemplate lists contract templates (GET /contract). order sets the sort
+// direction (1 ascending, -1 descending), limit caps the page size, offset
+// skips records for pagination, and filterTemplateID (when non-empty) returns
+// only the matching template. It returns the decoded JSON response, or an
+// error.
 func (c *ContractService) ListTemplate(order, limit, offset int, filterTemplateID string) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("order", strconv.Itoa(order))
@@ -270,7 +308,8 @@ func (c *ContractService) ListTemplate(order, limit, offset int, filterTemplateI
 	return c.client.doJSON(http.MethodGet, "contract", nil, q)
 }
 
-// GetTemplate retrieves a contract template (GET /contract/{id}).
+// GetTemplate retrieves a contract template by its templateID (required)
+// (GET /contract/{id}). It returns the decoded JSON response, or an error.
 func (c *ContractService) GetTemplate(templateID string) (map[string]any, error) {
 	if templateID == "" {
 		return nil, invalid("templateID is required")
@@ -278,7 +317,10 @@ func (c *ContractService) GetTemplate(templateID string) (map[string]any, error)
 	return c.client.doJSON(http.MethodGet, "contract/"+templateID, nil, nil)
 }
 
-// CreateTemplate creates a contract template (POST /contract).
+// CreateTemplate creates a contract template (POST /contract). name and
+// content (the template HTML body) are required; orientation, timezone and
+// font set the rendering options. It returns the decoded JSON response, or an
+// error.
 func (c *ContractService) CreateTemplate(name, content, orientation, timezone, font string) (map[string]any, error) {
 	if name == "" {
 		return nil, invalid("name is required")
@@ -290,7 +332,10 @@ func (c *ContractService) CreateTemplate(name, content, orientation, timezone, f
 	return c.client.doJSON(http.MethodPost, "contract", payload, nil)
 }
 
-// UpdateTemplate updates a contract template (POST /contract/{id}).
+// UpdateTemplate updates the contract template identified by templateID
+// (required) (POST /contract/{id}). name, content, orientation, timezone and
+// font replace the stored template's corresponding fields. It returns the
+// decoded JSON response, or an error.
 func (c *ContractService) UpdateTemplate(templateID, name, content, orientation, timezone, font string) (map[string]any, error) {
 	if templateID == "" {
 		return nil, invalid("templateID is required")
@@ -299,7 +344,9 @@ func (c *ContractService) UpdateTemplate(templateID, name, content, orientation,
 	return c.client.doJSON(http.MethodPost, "contract/"+templateID, payload, nil)
 }
 
-// DeleteTemplate deletes a contract template (DELETE /contract/{id}).
+// DeleteTemplate deletes the contract template identified by templateID
+// (required) (DELETE /contract/{id}). It returns the decoded JSON response, or
+// an error.
 func (c *ContractService) DeleteTemplate(templateID string) (map[string]any, error) {
 	if templateID == "" {
 		return nil, invalid("templateID is required")
@@ -311,21 +358,26 @@ func (c *ContractService) DeleteTemplate(templateID string) (map[string]any, err
 // Transaction
 // ---------------------------------------------------------------------------
 
+// TransactionService provides access to stored transaction records and the
+// image/file vault. Access it via Client.Transaction.
 type TransactionService struct{ client *Client }
 
-// TransactionListOptions holds filters for listing/exporting transactions.
+// TransactionListOptions holds filters for listing/exporting transactions. The
+// zero value is valid: Order defaults to -1 (descending) and Limit to 10.
 type TransactionListOptions struct {
-	Order            int
-	Limit            int
-	Offset           int
-	CreatedAtMin     int
-	CreatedAtMax     int
-	FilterCustomData string
-	FilterDecision   string
-	FilterDocupass   string
-	FilterProfileID  string
+	Order            int    // sort direction: 1 ascending, -1 descending (default -1)
+	Limit            int    // maximum records to return (default 10)
+	Offset           int    // records to skip, for pagination
+	CreatedAtMin     int    // earliest creation time, Unix seconds (0 = no bound)
+	CreatedAtMax     int    // latest creation time, Unix seconds (0 = no bound)
+	FilterCustomData string // match the transaction's customData field
+	FilterDecision   string // match the decision: "accept", "review" or "reject"
+	FilterDocupass   string // match the originating Docupass reference
+	FilterProfileID  string // match the KYC profile ID used
 }
 
+// values renders the options into a url.Values query string, applying the
+// Order/Limit defaults.
 func (o TransactionListOptions) values() url.Values {
 	q := url.Values{}
 	order := o.Order
@@ -360,7 +412,8 @@ func (o TransactionListOptions) values() url.Values {
 	return q
 }
 
-// Get retrieves a single transaction (GET /transaction/{id}).
+// Get retrieves the single transaction identified by transactionID (required)
+// (GET /transaction/{id}). It returns the decoded JSON response, or an error.
 func (t *TransactionService) Get(transactionID string) (map[string]any, error) {
 	if transactionID == "" {
 		return nil, invalid("transactionID is required")
@@ -368,12 +421,15 @@ func (t *TransactionService) Get(transactionID string) (map[string]any, error) {
 	return t.client.doJSON(http.MethodGet, "transaction/"+transactionID, nil, nil)
 }
 
-// List retrieves transaction history (GET /transaction).
+// List retrieves transaction history filtered and paginated by opts
+// (GET /transaction). It returns the decoded JSON response, or an error.
 func (t *TransactionService) List(opts TransactionListOptions) (map[string]any, error) {
 	return t.client.doJSON(http.MethodGet, "transaction", nil, opts.values())
 }
 
-// Update updates a transaction decision (PATCH /transaction/{id}).
+// Update overrides the decision on the transaction identified by transactionID
+// (required) (PATCH /transaction/{id}). decision must be one of "accept",
+// "review" or "reject". It returns the decoded JSON response, or an error.
 func (t *TransactionService) Update(transactionID, decision string) (map[string]any, error) {
 	if transactionID == "" {
 		return nil, invalid("transactionID is required")
@@ -384,7 +440,9 @@ func (t *TransactionService) Update(transactionID, decision string) (map[string]
 	return t.client.doJSON(http.MethodPatch, "transaction/"+transactionID, map[string]any{"decision": decision}, nil)
 }
 
-// Delete deletes a transaction (DELETE /transaction/{id}).
+// Delete deletes the transaction identified by transactionID (required)
+// (DELETE /transaction/{id}). It returns the decoded JSON response, or an
+// error.
 func (t *TransactionService) Delete(transactionID string) (map[string]any, error) {
 	if transactionID == "" {
 		return nil, invalid("transactionID is required")
@@ -392,7 +450,9 @@ func (t *TransactionService) Delete(transactionID string) (map[string]any, error
 	return t.client.doJSON(http.MethodDelete, "transaction/"+transactionID, nil, nil)
 }
 
-// SaveImage downloads a vault image to dest (GET /imagevault/{token}).
+// SaveImage downloads the vault image identified by imageToken (required) and
+// writes it to the local path dest (required) (GET /imagevault/{token}). It
+// returns an error if the arguments are missing or the download fails.
 func (t *TransactionService) SaveImage(imageToken, dest string) error {
 	if imageToken == "" || dest == "" {
 		return invalid("imageToken and dest are required")
@@ -400,7 +460,9 @@ func (t *TransactionService) SaveImage(imageToken, dest string) error {
 	return t.client.download("imagevault/"+imageToken, dest)
 }
 
-// SaveFile downloads a vault file to dest (GET /filevault/{name}).
+// SaveFile downloads the vault file named fileName (required) and writes it to
+// the local path dest (required) (GET /filevault/{name}). It returns an error
+// if the arguments are missing or the download fails.
 func (t *TransactionService) SaveFile(fileName, dest string) error {
 	if fileName == "" || dest == "" {
 		return invalid("fileName and dest are required")
@@ -408,7 +470,13 @@ func (t *TransactionService) SaveFile(fileName, dest string) error {
 	return t.client.download("filevault/"+fileName, dest)
 }
 
-// Export requests a transaction archive and downloads it to dest (POST /export/transaction).
+// Export requests a transaction archive and downloads it to the local path
+// dest (required) (POST /export/transaction). exportType is "csv" (default
+// when empty) or "json". transactionIDs, when non-empty, exports only those
+// records; otherwise the date and filter fields of opts (CreatedAtMin/Max,
+// FilterCustomData/Decision/Docupass/ProfileID) select the set.
+// ignoreUnrecognized and ignoreDuplicate skip those records. It returns an
+// error on bad arguments, an API error, or a download failure.
 func (t *TransactionService) Export(dest, exportType string, transactionIDs []string, ignoreUnrecognized, ignoreDuplicate bool, opts TransactionListOptions) error {
 	if dest == "" {
 		return invalid("dest is required")
@@ -448,32 +516,36 @@ func (t *TransactionService) Export(dest, exportType string, transactionIDs []st
 // Docupass
 // ---------------------------------------------------------------------------
 
+// DocupassService provides hosted-verification ("Docupass") link management.
+// Access it via Client.Docupass.
 type DocupassService struct{ client *Client }
 
 // DocupassCreateRequest holds parameters for creating a Docupass (POST /docupass).
+// Profile is required; all other fields are optional.
 type DocupassCreateRequest struct {
 	Profile               string // KYC profile ID (required)
 	Mode                  int    // 0=Document+Face, 1=Document, 2=Face, 3=e-Signature
-	ContractFormat        string
-	ContractGenerate      string
-	ContractSign          string
-	ContractPrefill       string
-	Reusable              bool
-	CustomData            string
-	Language              string
-	ReferenceDocument     string
-	ReferenceDocumentBack string
-	ReferenceFace         string
-	UserPhone             string
-	VerifyAddress         string
-	VerifyAge             string
-	VerifyDOB             string // note: docupass uses the upper-case "verifyDOB" field
-	VerifyDocumentNumber  string
-	VerifyName            string
-	VerifyPostcode        string
+	ContractFormat        string // generated contract format (default "pdf")
+	ContractGenerate      string // contract template ID to generate and present
+	ContractSign          string // contract template ID requiring an e-signature
+	ContractPrefill       string // key/value data (JSON) merged into the contract
+	Reusable              bool   // allow the link to be used more than once
+	CustomData            string // arbitrary string echoed on the transaction
+	Language              string // UI language code for the hosted page
+	ReferenceDocument     string // reference document front to match against
+	ReferenceDocumentBack string // reference document back to match against
+	ReferenceFace         string // reference face image to match against
+	UserPhone             string // end-user phone number (e.g. for SMS delivery)
+	VerifyAddress         string // assert the holder's address matches this value
+	VerifyAge             string // assert the age falls in this range, e.g. "18-40"
+	VerifyDOB             string // assert the date of birth; docupass uses the upper-case "verifyDOB" field
+	VerifyDocumentNumber  string // assert the document number matches this value
+	VerifyName            string // assert the holder's name matches this value
+	VerifyPostcode        string // assert the postcode matches this value
 }
 
-// Create creates a Docupass link (POST /docupass).
+// Create creates a Docupass hosted-verification link from req (POST /docupass).
+// req.Profile is required. It returns the decoded JSON response, or an error.
 func (d *DocupassService) Create(req DocupassCreateRequest) (map[string]any, error) {
 	if req.Profile == "" {
 		return nil, invalid("Profile is required")
@@ -506,7 +578,9 @@ func (d *DocupassService) Create(req DocupassCreateRequest) (map[string]any, err
 	return d.client.doJSON(http.MethodPost, "docupass", payload, nil)
 }
 
-// List lists Docupass records (GET /docupass).
+// List lists Docupass records (GET /docupass). order sets the sort direction
+// (1 ascending, -1 descending), limit caps the page size and offset skips
+// records for pagination. It returns the decoded JSON response, or an error.
 func (d *DocupassService) List(order, limit, offset int) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("order", strconv.Itoa(order))
@@ -515,7 +589,9 @@ func (d *DocupassService) List(order, limit, offset int) (map[string]any, error)
 	return d.client.doJSON(http.MethodGet, "docupass", nil, q)
 }
 
-// Get retrieves a single Docupass (GET /docupass/{reference}).
+// Get retrieves the single Docupass identified by reference (required)
+// (GET /docupass/{reference}). It returns the decoded JSON response, or an
+// error.
 func (d *DocupassService) Get(reference string) (map[string]any, error) {
 	if reference == "" {
 		return nil, invalid("reference is required")
@@ -523,7 +599,9 @@ func (d *DocupassService) Get(reference string) (map[string]any, error) {
 	return d.client.doJSON(http.MethodGet, "docupass/"+reference, nil, nil)
 }
 
-// Delete deletes a Docupass (DELETE /docupass/{reference}).
+// Delete deletes the Docupass identified by reference (required)
+// (DELETE /docupass/{reference}). It returns the decoded JSON response, or an
+// error.
 func (d *DocupassService) Delete(reference string) (map[string]any, error) {
 	if reference == "" {
 		return nil, invalid("reference is required")
@@ -535,8 +613,12 @@ func (d *DocupassService) Delete(reference string) (map[string]any, error) {
 // Profile (server-side KYC profile management)
 // ---------------------------------------------------------------------------
 
+// ProfileService provides server-side KYC profile management. Access it via
+// Client.Profile.
 type ProfileService struct{ client *Client }
 
+// profileBody builds the request body for create/update, merging the profile
+// name (when set) with the Profile's Override fields.
 func profileBody(name string, p *Profile) map[string]any {
 	body := map[string]any{}
 	if name != "" {
@@ -550,7 +632,9 @@ func profileBody(name string, p *Profile) map[string]any {
 	return body
 }
 
-// List lists KYC profiles (GET /profile).
+// List lists KYC profiles (GET /profile). order sets the sort direction (1
+// ascending, -1 descending), limit caps the page size and offset skips records
+// for pagination. It returns the decoded JSON response, or an error.
 func (s *ProfileService) List(order, limit, offset int) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("order", strconv.Itoa(order))
@@ -559,7 +643,8 @@ func (s *ProfileService) List(order, limit, offset int) (map[string]any, error) 
 	return s.client.doJSON(http.MethodGet, "profile", nil, q)
 }
 
-// Get retrieves a KYC profile (GET /profile/{id}).
+// Get retrieves the KYC profile identified by profileID (required)
+// (GET /profile/{id}). It returns the decoded JSON response, or an error.
 func (s *ProfileService) Get(profileID string) (map[string]any, error) {
 	if profileID == "" {
 		return nil, invalid("profileID is required")
@@ -567,7 +652,9 @@ func (s *ProfileService) Get(profileID string) (map[string]any, error) {
 	return s.client.doJSON(http.MethodGet, "profile/"+profileID, nil, nil)
 }
 
-// Create creates a KYC profile (POST /profile).
+// Create creates a KYC profile (POST /profile). name (required) is the profile
+// label; the optional p supplies the profile's settings via its Override map.
+// It returns the decoded JSON response, or an error.
 func (s *ProfileService) Create(name string, p *Profile) (map[string]any, error) {
 	if name == "" {
 		return nil, invalid("name is required")
@@ -575,7 +662,10 @@ func (s *ProfileService) Create(name string, p *Profile) (map[string]any, error)
 	return s.client.doJSON(http.MethodPost, "profile", profileBody(name, p), nil)
 }
 
-// Update updates a KYC profile (PUT /profile/{id}).
+// Update updates the KYC profile identified by profileID (required)
+// (PUT /profile/{id}). name sets the profile label and the optional p supplies
+// the settings to store via its Override map. It returns the decoded JSON
+// response, or an error.
 func (s *ProfileService) Update(profileID, name string, p *Profile) (map[string]any, error) {
 	if profileID == "" {
 		return nil, invalid("profileID is required")
@@ -583,7 +673,8 @@ func (s *ProfileService) Update(profileID, name string, p *Profile) (map[string]
 	return s.client.doJSON(http.MethodPut, "profile/"+profileID, profileBody(name, p), nil)
 }
 
-// Delete deletes a KYC profile (DELETE /profile/{id}).
+// Delete deletes the KYC profile identified by profileID (required)
+// (DELETE /profile/{id}). It returns the decoded JSON response, or an error.
 func (s *ProfileService) Delete(profileID string) (map[string]any, error) {
 	if profileID == "" {
 		return nil, invalid("profileID is required")
@@ -591,7 +682,9 @@ func (s *ProfileService) Delete(profileID string) (map[string]any, error) {
 	return s.client.doJSON(http.MethodDelete, "profile/"+profileID, nil, nil)
 }
 
-// Export exports a KYC profile (GET /export/profile/{id}).
+// Export exports the full settings of the KYC profile identified by profileID
+// (required) (GET /export/profile/{id}). It returns the decoded JSON response,
+// or an error.
 func (s *ProfileService) Export(profileID string) (map[string]any, error) {
 	if profileID == "" {
 		return nil, invalid("profileID is required")
@@ -603,9 +696,16 @@ func (s *ProfileService) Export(profileID string) (map[string]any, error) {
 // Webhook
 // ---------------------------------------------------------------------------
 
+// WebhookService provides access to webhook delivery logs. Access it via
+// Client.Webhook.
 type WebhookService struct{ client *Client }
 
-// List lists webhook delivery logs (GET /webhook).
+// List lists webhook delivery logs (GET /webhook). order sets the sort
+// direction (1 ascending, -1 descending); limit and offset paginate; event
+// (when non-empty) filters by event name; success filters by delivery outcome
+// (0 failed, 1 succeeded — any other value applies no filter); createdAtMin and
+// createdAtMax (when non-empty) bound the creation time. It returns the decoded
+// JSON response, or an error.
 func (w *WebhookService) List(order, limit, offset int, event string, success int, createdAtMin, createdAtMax string) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("order", strconv.Itoa(order))
@@ -626,7 +726,8 @@ func (w *WebhookService) List(order, limit, offset int, event string, success in
 	return w.client.doJSON(http.MethodGet, "webhook", nil, q)
 }
 
-// Resend resends a webhook delivery (POST /webhook/{id}).
+// Resend re-delivers the webhook identified by webhookID (required)
+// (POST /webhook/{id}). It returns the decoded JSON response, or an error.
 func (w *WebhookService) Resend(webhookID string) (map[string]any, error) {
 	if webhookID == "" {
 		return nil, invalid("webhookID is required")
@@ -634,7 +735,8 @@ func (w *WebhookService) Resend(webhookID string) (map[string]any, error) {
 	return w.client.doJSON(http.MethodPost, "webhook/"+webhookID, map[string]any{}, nil)
 }
 
-// Delete deletes a webhook delivery log (DELETE /webhook/{id}).
+// Delete deletes the webhook delivery log identified by webhookID (required)
+// (DELETE /webhook/{id}). It returns the decoded JSON response, or an error.
 func (w *WebhookService) Delete(webhookID string) (map[string]any, error) {
 	if webhookID == "" {
 		return nil, invalid("webhookID is required")
@@ -646,9 +748,12 @@ func (w *WebhookService) Delete(webhookID string) (map[string]any, error) {
 // Account
 // ---------------------------------------------------------------------------
 
+// AccountService provides access to the authenticated account's profile and
+// usage. Access it via Client.Account.
 type AccountService struct{ client *Client }
 
 // Get retrieves the current account profile, quota and usage (GET /myaccount).
+// It returns the decoded JSON response, or an error.
 func (a *AccountService) Get() (map[string]any, error) {
 	return a.client.doJSON(http.MethodGet, "myaccount", nil, nil)
 }
