@@ -276,45 +276,28 @@ func (a *AMLService) SearchV3(text, id string, limit, page int) (map[string]any,
 // Access it via Client.KYB.
 type KYBService struct{ client *Client }
 
-// KYBVerifyRequest holds parameters for a business verification (POST /kyb). At
-// least one of Document, LegalName or RegistrationNumber must be set.
+// KYBVerifyRequest holds parameters for a business verification (POST /kyb). A
+// Document is required; Profile is optional.
 type KYBVerifyRequest struct {
-	Document           string // registration/incorporation document: file path, raw base64, URL, or data URL
-	LegalName          string // registered legal name of the business
-	LegalNameLocal     string // registered legal name in the local language/script
-	RegistrationNumber string // company registration / incorporation number
-	TaxNumber          string // business tax number
-	LEI                string // Legal Entity Identifier (LEI)
-	Country            string // two-letter ISO country code where the business is registered
-	State              string // state/province where the business is registered
-	EntityType         string // business entity type
+	Document string // registration/incorporation document: file path, raw base64, URL, or data URL (required)
+	Profile  string // optional KYC profile to apply to the verification
 }
 
 // Verify verifies a business from its registration/incorporation document
-// and/or known identifiers (POST /kyb). It extracts the company details, checks
-// official company registries, screens against sanctions/PEP watchlists, and
-// returns directors and owners to verify. It returns the decoded JSON response,
-// or an error.
+// (POST /kyb). A document is required; an optional profile selects the KYC
+// profile. It extracts the company details, checks official company registries,
+// screens against sanctions/PEP watchlists, and returns directors and owners to
+// verify. It returns the decoded JSON response, or an error.
 func (k *KYBService) Verify(req KYBVerifyRequest) (map[string]any, error) {
-	if req.Document == "" && req.LegalName == "" && req.RegistrationNumber == "" {
-		return nil, invalid("Provide a document, or legalName/registrationNumber.")
+	if req.Document == "" {
+		return nil, invalid("A business document (image or PDF) is required.")
 	}
-	payload := map[string]any{}
-	if req.Document != "" {
-		doc, err := ParseInput(req.Document, true)
-		if err != nil {
-			return nil, err
-		}
-		payload["document"] = doc
+	doc, err := ParseInput(req.Document, true)
+	if err != nil {
+		return nil, err
 	}
-	putStr(payload, "legalName", req.LegalName)
-	putStr(payload, "legalNameLocal", req.LegalNameLocal)
-	putStr(payload, "registrationNumber", req.RegistrationNumber)
-	putStr(payload, "taxNumber", req.TaxNumber)
-	putStr(payload, "lei", req.LEI)
-	putStr(payload, "entityType", req.EntityType)
-	putStr(payload, "countryIso2", req.Country)
-	putStr(payload, "state", req.State)
+	payload := map[string]any{"document": doc}
+	putStr(payload, "profile", req.Profile)
 	// KYB is heavier than a scan, allow up to 120 seconds for the response.
 	return k.client.doJSONTimeout(http.MethodPost, "kyb", payload, nil, 120*time.Second)
 }
