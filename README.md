@@ -79,8 +79,8 @@ client.AML.SearchV3("John Smith", "", 10, 1)                                    
 // Verify a business from its registration/incorporation document: extract
 // details, check official company registries, screen against sanctions/PEP,
 // and return directors/owners to verify.
-client.KYB.Verify(idanalyzer.KYBVerifyRequest{Document: "registration.jpg"})                                    // from a document
-client.KYB.Verify(idanalyzer.KYBVerifyRequest{LegalName: "ACME CORPORATION", RegistrationNumber: "12345678", Country: "US"}) // from known details
+client.KYB.Verify(idanalyzer.KYBVerifyRequest{Document: "registration.jpg"})                       // document only
+client.KYB.Verify(idanalyzer.KYBVerifyRequest{Document: "registration.jpg", Profile: "security_high"}) // with a KYC profile
 
 // DocuPass — hosted remote verification link
 link, _ := client.Docupass.Create(idanalyzer.DocupassCreateRequest{Profile: "YOUR_PROFILE_ID"})
