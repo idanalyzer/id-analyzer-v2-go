@@ -2,12 +2,13 @@
 //
 // It targets the api2.idanalyzer.com endpoint (US, default) or
 // api2-eu.idanalyzer.com (EU). Create a client with NewClient and use the
-// service fields (Scanner, Biometric, AML, Contract, Transaction, Docupass,
+// service fields (Scanner, Biometric, AML, KYB, Contract, Transaction, Docupass,
 // Profile, Webhook, Account).
 package idanalyzer
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -54,6 +55,7 @@ type Client struct {
 	Scanner     *ScannerService
 	Biometric   *BiometricService
 	AML         *AMLService
+	KYB         *KYBService
 	Contract    *ContractService
 	Transaction *TransactionService
 	Docupass    *DocupassService
@@ -128,6 +130,7 @@ func NewClient(apiKey string, opts ...Option) (*Client, error) {
 	c.Scanner = &ScannerService{c}
 	c.Biometric = &BiometricService{c}
 	c.AML = &AMLService{c}
+	c.KYB = &KYBService{c}
 	c.Contract = &ContractService{c}
 	c.Transaction = &TransactionService{c}
 	c.Docupass = &DocupassService{c}
@@ -146,6 +149,13 @@ func (c *Client) endpoint(uri string) string {
 
 // doJSON issues a request with an optional JSON body and decodes the JSON response.
 func (c *Client) doJSON(method, uri string, body map[string]any, query url.Values) (map[string]any, error) {
+	return c.doJSONTimeout(method, uri, body, query, 0)
+}
+
+// doJSONTimeout behaves like doJSON but applies a per-request timeout (in
+// addition to the client's default) when timeout is greater than zero. This is
+// used for heavier endpoints that may take longer than a standard request.
+func (c *Client) doJSONTimeout(method, uri string, body map[string]any, query url.Values, timeout time.Duration) (map[string]any, error) {
 	var reader io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -169,7 +179,19 @@ func (c *Client) doJSON(method, uri string, body map[string]any, query url.Value
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.httpClient.Do(req)
+	// Heavier endpoints may need longer than the client's default timeout; use a
+	// context-bounded deadline for this single request when one is requested.
+	httpClient := c.httpClient
+	if timeout > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		req = req.WithContext(ctx)
+		cc := *c.httpClient
+		cc.Timeout = timeout
+		httpClient = &cc
+	}
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -75,6 +75,13 @@ func main() {
 client.AML.Search(idanalyzer.AMLSearchRequest{Name: "John Smith", Country: "US"}) // POST /aml
 client.AML.SearchV3("John Smith", "", 10, 1)                                       // POST /amlv3
 
+// KYB — business verification
+// Verify a business from its registration/incorporation document: extract
+// details, check official company registries, screen against sanctions/PEP,
+// and return directors/owners to verify.
+client.KYB.Verify(idanalyzer.KYBVerifyRequest{Document: "registration.jpg"})                                    // from a document
+client.KYB.Verify(idanalyzer.KYBVerifyRequest{LegalName: "ACME CORPORATION", RegistrationNumber: "12345678", Country: "US"}) // from known details
+
 // DocuPass — hosted remote verification link
 link, _ := client.Docupass.Create(idanalyzer.DocupassCreateRequest{Profile: "YOUR_PROFILE_ID"})
 fmt.Println(link["url"])
@@ -91,6 +98,7 @@ The SDK wraps the complete ID Analyzer API v2 surface via service fields on the 
 | `client.Scanner` | `Scan`, `QuickScan`, `VeryQuickScan` |
 | `client.Biometric` | `VerifyFace`, `VerifyLiveness` |
 | `client.AML` | `Search` (`/aml`), `SearchV3` (`/amlv3`) |
+| `client.KYB` | `Verify` (`/kyb`) |
 | `client.Contract` | `Generate` + template CRUD |
 | `client.Transaction` | `Get`, `List`, `Update`, `Delete`, `Export`, `SaveImage`, `SaveFile` |
 | `client.Docupass` | `Create`, `List`, `Get`, `Delete` |
